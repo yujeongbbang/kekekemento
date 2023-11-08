@@ -1,18 +1,20 @@
 package com.kekeke.kekekebackend.domain.member.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.api.client.auth.oauth2.TokenResponse;
 import com.kekeke.kekekebackend.common.exception.BusinessException;
 import com.kekeke.kekekebackend.common.exception.ErrorCode;
 import com.kekeke.kekekebackend.common.jwt.Jwt;
+import com.kekeke.kekekebackend.domain.member.model.dto.request.LoginRequest;
+import com.kekeke.kekekebackend.domain.member.model.dto.request.SignUpRequest;
+import com.kekeke.kekekebackend.domain.member.model.dto.request.TokenRefreshRequest;
+import com.kekeke.kekekebackend.domain.member.model.dto.request.UpdateRequest;
+import com.kekeke.kekekebackend.domain.member.model.dto.response.MemberResponse;
+import com.kekeke.kekekebackend.domain.member.model.dto.response.TokenResponse;
 import com.kekeke.kekekebackend.domain.member.model.entity.Member;
+import com.kekeke.kekekebackend.domain.member.model.vo.MemberAuthority;
 import com.kekeke.kekekebackend.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,46 @@ public class MemberService {
 	private final Jwt jwt;
 	private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 	private final ObjectMapper objectMapper = new ObjectMapper();
+
+
+	public boolean checkDuplicateNickname(String nickname)
+	{
+		return memberRepository.existsByNickname(nickname);
+	}
+
+	public boolean checkDuplicateUsername(String username)
+	{
+		return memberRepository.existsByUsername(username);
+	}
+
+	@Transactional
+	public void signUp(SignUpRequest req)
+	{
+		memberRepository.save(
+				Member.builder()
+						.nickname(req.getNickname())
+						.username(req.getUsername())
+						.passwordHashed(passwordEncoder.encode(req.getPassword()))
+						.phoneNumber(req.getPhoneNumber())
+						.memberAuthority(MemberAuthority.USER)
+						.build());
+	}
+
+	public TokenResponse login(LoginRequest req)
+	{
+		var member = memberRepository.findByUsername(req.getUsername());
+		if (member.isPresent() == false)
+		{
+			throw new BusinessException(ErrorCode.ENTITY_NOT_FOUND);
+		}
+
+		if (passwordEncoder.matches(req.getPassword(), member.get().getPasswordHashed()) == false)
+		{
+			throw new BusinessException(ErrorCode.UNAUTHORIZED);
+		}
+
+		return publishToken(member.get());
+	}
 
 
 	@Transactional
@@ -86,31 +128,34 @@ public class MemberService {
 	}
 
 	@Transactional
-	public void deleteMember(Long memberId)
+	public MemberResponse get(Long memberId)
+	{
+		var member = getById(memberId);
+
+		return MemberResponse.mapFromMember(member);
+	}
+
+	@Transactional
+	public void update(Long memberId, UpdateRequest req)
+	{
+		var member = getById(memberId);
+
+		member.setNickname(req.getNickname());
+		member.setPhoneNumber(req.getPhoneNumber());
+		member.setPasswordHashed(passwordEncoder.encode(req.getPassword()));
+		member.setProfilePhoto(req.getProfilePhoto());
+	}
+
+	@Transactional
+	public void delete(Long memberId)
 	{
 		memberRepository.deleteById(memberId);
 	}
-
 
 	@Transactional
 	public void updateFcmToken(Long memberId, String fcmToken)
 	{
 		var member = getById(memberId);
 		member.setFcmToken(fcmToken);
-	}
-
-
-	private LoginResponse getLoginResponse(Member member)
-	{
-		var tokens = publishToken(member);
-		if (member.getProfileName() == null ||
-				member.getProfileName().isEmpty())
-		{
-			return new LoginResponse(tokens, true);
-		}
-		else
-		{
-			return new LoginResponse(tokens, false);
-		}
 	}
 }

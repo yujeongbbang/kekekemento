@@ -2,6 +2,7 @@ package com.kekeke.kekekebackend.domain.member.model.entity;
 
 
 import com.kekeke.kekekebackend.domain.BaseEntity;
+import com.kekeke.kekekebackend.domain.member.model.vo.MemberAuthority;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.SQLDelete;
@@ -26,11 +27,17 @@ public class Member extends BaseEntity {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
+	@Column(name = "member_authority", nullable = false)
+	@Enumerated(EnumType.STRING)
+	private MemberAuthority memberAuthority;
+
 	@Column(unique = true)
 	private String nickname;
 
 	@Column(unique = true)
 	private String username; // id
+
+	private String profilePhoto;
 
 	private String passwordHashed;
 
